@@ -1,5 +1,5 @@
 const googleSsoRegex = /name="SAMLResponse" value="([\s\S]+?)"/i;
-const accountSelectionRegex = `tabindex="\\d" jsname="\\S\*" data-authuser="(-?\\d)" data-identifier="(\\S\*@DOMAIN)"`;
+const accountSelectionRegex = `tabindex="\\d" jsname="\\S\*" data-authuser="(-?\\d)" data-identifier="(\\S\*@DOMAIN)" data-ogid="\\d\*" data-item-index="(\\d)"`;
 const stsTokenRegex =
 	/<(AccessKeyId)>(\S+)<\/|<(SecretAccessKey)>(\S+)<\/|<(SessionToken)>(\S+)<\/|<(Expiration)>(\S+)<\//i;
 const samlFetchErrorRegex = /var problems = {"main": "([\S\s]+)"};/i;
@@ -202,7 +202,7 @@ function awsInit(props, port = null, jobType = "refresh") {
 						const msg = "Organization domain not found. Please check that you have a Google Account with that domain name logged in.";
 						throw msg;
 					}
-					const accountIndex = accountData[1];
+					const accountIndex = accountData[3];
 					//if(accountIndex==-1){
 					//let msg = `${accountData[2]} is not logged in. Please login and try again.`
 					//throw msg
