@@ -31,7 +31,7 @@ function getApi() {
 		if (typeof browser !== "undefined") {
 			return browser;
 		}
-			return chrome;
+		return chrome;
 	}
 }
 class portWithExceptions {
@@ -75,9 +75,9 @@ getApi().alarms.onAlarm.addListener((alarm) => {
 });
 
 async function main() {
-    getApi().runtime.onConnect.addListener((port) => {
+	getApi().runtime.onConnect.addListener((port) => {
 		const portEx = new portWithExceptions(port);
-        port.onMessage.addListener(async (msg) => {
+		port.onMessage.addListener(async (msg) => {
 			//Stop all background schedule jobs.
 			if (msg === "refreshoff") {
 				storage.set({ checked: 0 });
@@ -85,7 +85,7 @@ async function main() {
 			}
 			//Start background role refresh
 			if (msg === "refreshon") {
-                storage.get(null,  (props) => {
+				storage.get(null, (props) => {
 					if (confCheck(props)) {
 						getApi().alarms.create("refreshToken", {
 							periodInMinutes: Number.parseInt(props.refresh_interval),
@@ -98,7 +98,7 @@ async function main() {
 			}
 			//Start role refresh
 			if (msg === "role_refresh") {
-                storage.get(null, (props) => {
+				storage.get(null, (props) => {
 					if (confCheck(props)) awsInit(props, portEx, msg);
 				});
 			}
@@ -110,9 +110,8 @@ main();
 
 function confCheck(props) {
 	if (
-		(props.organization_domain ||
-			props.google_idpid ||
-			props.google_spid) === ""
+		(props.organization_domain || props.google_idpid || props.google_spid) ===
+		""
 	) {
 		return false;
 	}
@@ -133,8 +132,7 @@ function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
 	const roleArn = arnPrefix + role;
 	const awsAccount = roleArn.split(":")[4];
 	const principalArn = `${arnPrefix}${awsAccount}:saml-provider/${props.saml_provider}`;
-	const data =
-		`RelayState=&SAMLResponse=${encodeURIComponent(samlResponse)}&name=&portal=&roleIndex=${encodeURIComponent(roleArn)}`;
+	const data = `RelayState=&SAMLResponse=${encodeURIComponent(samlResponse)}&name=&portal=&roleIndex=${encodeURIComponent(roleArn)}`;
 	fetch(awsSamlUrl, {
 		method: "POST",
 		body: data,
@@ -147,9 +145,9 @@ function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
 				const msg = `SAML fetch reponse returned error: ${errorCheck[1]}`;
 				throw msg;
 			}
-				const date = new Date().toLocaleString();
-				console.log(`AWS AlwaysON refreshed tokens successfuly at ${date}`);
-				fetchSts(roleArn, principalArn, samlResponse, props, port);
+			const date = new Date().toLocaleString();
+			console.log(`AWS AlwaysON refreshed tokens successfuly at ${date}`);
+			fetchSts(roleArn, principalArn, samlResponse, props, port);
 		})
 		.catch((error) => {
 			const msg = `Error in SAML fetch:${error}`;
@@ -171,15 +169,15 @@ function refreshAwsRoles(port, samlResponse) {
 				const msg = `SAML fetch reponse returned error: ${errorCheck[1]}`;
 				throw msg;
 			}
-				let i = 0;
-				const parseGlobal = RegExp(roleParseRegex, "g");
-				let matches;
-				while ((matches = parseGlobal.exec(response)) !== null) {
-					storage.set({ [`role${i}`]: matches[1] });
-					++i;
-				}
-				storage.set({ roleCount: i });
-				if (port) port.postMessage("roles_refreshed");
+			let i = 0;
+			const parseGlobal = RegExp(roleParseRegex, "g");
+			let matches;
+			while ((matches = parseGlobal.exec(response)) !== null) {
+				storage.set({ [`role${i}`]: matches[1] });
+				++i;
+			}
+			storage.set({ roleCount: i });
+			if (port) port.postMessage("roles_refreshed");
 		})
 		.catch((error) => {
 			const msg = `Error in SAML fetch:${error}`;
@@ -197,46 +195,24 @@ function awsInit(props, port = null, jobType = "refresh") {
 						accountSelectionRegex.replace("DOMAIN", props.organization_domain),
 						"i",
 					);
+
 					const accountData = accounts.match(re);
 					if (accountData === null) {
-						const msg = "Organization domain not found. Please check that you have a Google Account with that domain name logged in.";
+						const msg =
+							"Organization domain not found. Please check that you have a Google Account with that domain name logged in.";
 						throw msg;
 					}
-					const accountIndex = accountData[1];
-					//if(accountIndex==-1){
-					//let msg = `${accountData[2]} is not logged in. Please login and try again.`
-					//throw msg
-					//}
+
 					console.log(`Refreshing credentials for ${accountData[2]}`);
-					fetch(
-						`${googleSsoUrl.replace("IDPID", props.google_idpid).replace("SPID", props.google_spid)}${accountIndex}`,
-					)
-						.then((response) => {
-							response
-								.text()
-								.then((result) => {
-									const samlResponse = result.match(googleSsoRegex)[1];
-									switch (jobType) {
-										case "role_refresh":
-											refreshAwsRoles(port, samlResponse);
-											break;
-										default:
-											refreshAwsTokensAndStsCredentials(
-												props,
-												port,
-												samlResponse,
-											);
-									}
-								})
-								.catch((error) => {
-									const msg = `Error processing SSO URL:${error}`;
-									errHandler(port, msg);
-								});
-						})
-						.catch((error) => {
-							const msg = `Error fetching SSO URL:${error}`;
-							errHandler(port, msg);
-						});
+					findAccountIndex(props).then((samlResponse) => {
+						switch (jobType) {
+							case "role_refresh":
+								refreshAwsRoles(port, samlResponse);
+								break;
+							default:
+								refreshAwsTokensAndStsCredentials(props, port, samlResponse);
+						}
+					});
 				})
 				.catch((error) => {
 					const msg = `Error processing Google account chooser data:${error}`;
@@ -293,4 +269,16 @@ function fetchSts(roleArn, principalArn, samlResponse, props, port) {
 			const msg = `Error getting STS credentials:${error}`;
 			errHandler(port, msg);
 		});
+}
+
+async function findAccountIndex(props) {
+	const url = `${googleSsoUrl.replace("IDPID", props.google_idpid).replace("SPID", props.google_spid)}`;
+	for (let i = 1; i <= 100; i++) {
+		response = await fetch(`${url}${i}`);
+		text = await response.text();
+		try {
+			const samlResponse = text.match(googleSsoRegex)[1];
+			return samlResponse;
+		} catch (error) {}
+	}
 }
