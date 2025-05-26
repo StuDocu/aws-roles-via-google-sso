@@ -266,11 +266,13 @@ function fetchSts(roleArn, principalArn, samlResponse, props, port) {
 
 async function findAccountIndex(props) {
 	const url = `${googleSsoUrl.replace("IDPID", props.google_idpid).replace("SPID", props.google_spid)}`;
-	for (let i = 0; i <= 100; i++) {
+	for (let i = 0; i <= 10; i++) {
+		console.debug(`Attempting authuser=${i}`);
 		const response = await fetch(`${url}${i}`);
 		const text = await response.text();
 		try {
 			const samlResponse = text.match(googleSsoRegex)[1];
+			console.log(`Success with authuser=${i}`);
 			return samlResponse;
 		} catch (error) {}
 	}
