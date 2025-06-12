@@ -18,6 +18,43 @@ $(".txtbox").focusout(function () {
 	storage.set(obj);
 });
 
+// Save textarea content to local storage
+$(".textareabox").focusout(function () {
+	const optionName = $(this).attr("id");
+	const optionValue = $(this).val();
+
+	// Parse account mappings into an object
+	if (optionName === "aws_account_mappings") {
+		const mappings = {};
+		const lines = optionValue.split("\n");
+
+		lines.forEach(line => {
+			// Skip empty lines
+			if (line.trim() === "") return;
+
+			// Expected format: "accountId: Friendly Name"
+			const parts = line.split(":");
+			if (parts.length >= 2) {
+				const accountId = parts[0].trim();
+				const friendlyName = parts.slice(1).join(":").trim();
+				if (accountId && friendlyName) {
+					mappings[accountId] = friendlyName;
+				}
+			}
+		});
+
+		// Save both the raw text and the parsed object
+		storage.set({
+			[optionName]: optionValue,
+			"aws_account_mappings_parsed": mappings
+		});
+	} else {
+		storage.set({
+			[optionName]: optionValue
+		});
+	}
+});
+
 //Save checkboxes values to local storage
 $(":checkbox").change(function () {
 	const optionName = $(this).attr("id");
@@ -58,6 +95,10 @@ function loadOptions() {
 			$(this).prop("checked", props[$(this).prop("id")]);
 		});
 	});
+
+	storage.get("aws_account_mappings", (props) => {
+		$("#aws_account_mappings").val(props.aws_account_mappings || "");
+	});
 }
 
 //display help information
@@ -86,6 +127,37 @@ $(".tablinks").click(function () {
 			$(this).css("display", "none");
 		}
 	});
+});
+
+// Handle Save Account Mappings button click
+$("#save_mappings").click(function() {
+    const optionValue = $("#aws_account_mappings").val();
+    const mappings = {};
+    const lines = optionValue.split("\n");
+
+    lines.forEach(line => {
+        // Skip empty lines
+        if (line.trim() === "") return;
+
+        // Expected format: "accountId: Friendly Name"
+        const parts = line.split(":");
+        if (parts.length >= 2) {
+            const accountId = parts[0].trim();
+            const friendlyName = parts.slice(1).join(":").trim();
+            if (accountId && friendlyName) {
+                mappings[accountId] = friendlyName;
+            }
+        }
+    });
+
+    // Save both the raw text and the parsed object
+    storage.set({
+        "aws_account_mappings": optionValue,
+        "aws_account_mappings_parsed": mappings
+    }, function() {
+        // Show success message
+        $("#mapping_status").text("Account mappings saved successfully!").fadeIn().delay(2000).fadeOut();
+    });
 });
 
 $(document).ready(loadOptions);

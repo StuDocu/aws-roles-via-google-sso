@@ -111,8 +111,25 @@ input:checked + .slider:before {
 
 .topbar {
     height: 50px;
-    width: 100%
+    width: 100%;
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
 }
+
+.topbar button {
+    padding: 5px 10px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background-color: #f5f5f5;
+    cursor: pointer;
+}
+
+.topbar button:hover {
+    background-color: #e0e0e0;
+}
+
+/* Reload UI button removed */
 
 .errorbar {
     position: fixed;
@@ -122,4 +139,26 @@ input:checked + .slider:before {
     background-color: red;
     z-index: 1;
     color: black;
+}
+
+.status-message {
+    padding: 5px;
+    margin-top: 5px;
+    border-radius: 3px;
+    text-align: center;
+    font-weight: bold;
+    display: none;
+}
+
+/* Style for the role input to accommodate longer text */
+.txtbox {
+    width: 300px;
+    height: 50px;
+    align-self: center;
+    justify-self: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px; /* Smaller font size to fit more content */
+    padding: 5px 8px;
 }
