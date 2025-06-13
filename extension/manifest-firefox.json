@@ -16,7 +16,8 @@
         "alarms",
         "*://*.google.com/*",
         "*://*.aws.amazon.com/*",
-        "http://localhost/*"
+        "http://localhost/*",
+        "*://*.amazonaws.com/*"
     ],
     "background": {
         "scripts": [
