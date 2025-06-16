@@ -219,10 +219,22 @@ function awsInit(props, port = null, jobType = "refresh") {
 }
 
 function fetchSts(roleArn, principalArn, samlResponse, props, port) {
-	const STSUrl = `${awsStsUrl}/?Version=2011-06-15&Action=AssumeRoleWithSAML&RoleArn=${roleArn}&PrincipalArn=${principalArn}&SAMLAssertion=${encodeURIComponent(samlResponse.trim())}&AUTHPARAMS&DurationSeconds=${props.session_duration}`;
-	fetch(STSUrl, {
-		method: "GET",
-		headers: requestHeaders,
+	const formBody = new URLSearchParams({
+		Version: "2011-06-15",
+		Action: "AssumeRoleWithSAML",
+		RoleArn: roleArn,
+		PrincipalArn: principalArn,
+		SAMLAssertion: samlResponse.trim(),
+		DurationSeconds: props.session_duration
+	}).toString();
+
+	fetch(awsStsUrl, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/x-www-form-urlencoded",
+			Accept: "*/*",
+		},
+		body: formBody,
 	})
 		.then((response) => response.text())
 		.then((data) => {
