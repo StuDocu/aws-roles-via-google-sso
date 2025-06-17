@@ -128,7 +128,13 @@ function errHandler(port, msg) {
 }
 
 function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
-	const role = props[props.checked];
+	// Check if we have an original role stored (without friendly name)
+	const roleKey = props.checked;
+	const originalRoleKey = `${roleKey}_original`;
+
+	// Use the original role ID if it exists, otherwise use the standard role value
+	const role = props[originalRoleKey] || props[roleKey];
+
 	const roleArn = arnPrefix + role;
 	const awsAccount = roleArn.split(":")[4];
 	const principalArn = `${arnPrefix}${awsAccount}:saml-provider/${props.saml_provider}`;
@@ -169,15 +175,50 @@ function refreshAwsRoles(port, samlResponse) {
 				const msg = `SAML fetch reponse returned error: ${errorCheck[1]}`;
 				throw msg;
 			}
+
+			// First collect all roles
 			let i = 0;
+			const roleValues = [];
 			const parseGlobal = RegExp(roleParseRegex, "g");
 			let matches;
 			while ((matches = parseGlobal.exec(response)) !== null) {
-				storage.set({ [`role${i}`]: matches[1] });
+				roleValues.push(matches[1]);
 				++i;
 			}
-			storage.set({ roleCount: i });
-			if (port) port.postMessage("roles_refreshed");
+
+			// Then get account mappings from storage
+			storage.get(["aws_account_mappings_parsed"], (data) => {
+				const awsAccountMapping = data.aws_account_mappings_parsed || {};
+				console.log("Account mappings during refresh:", awsAccountMapping);
+
+				// Create a batch update object
+				const updateBatch = { roleCount: roleValues.length };
+
+				// Now store all roles with their original format for API calls
+				for (let j = 0; j < roleValues.length; j++) {
+					const roleValue = roleValues[j];
+
+					// Store the original value for proper API calls
+					updateBatch[`role${j}_original`] = roleValue;
+
+					// Check if we have a friendly name for this account
+					const accountId = roleValue.split("/")[0];
+					const friendlyName = awsAccountMapping[accountId];
+
+					if (friendlyName) {
+						console.log(`Found mapping for ${accountId}: ${friendlyName}`);
+					}
+
+					// Store the display value (original value for now, will be formatted in menu.js)
+					updateBatch[`role${j}`] = roleValue;
+				}
+
+				// Update storage with all values at once
+				storage.set(updateBatch, function() {
+					console.log("Roles updated successfully");
+					if (port) port.postMessage("roles_refreshed");
+				});
+			});
 		})
 		.catch((error) => {
 			const msg = `Error in SAML fetch:${error}`;

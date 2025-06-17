@@ -25,6 +25,13 @@
                 <input type="text" id="google_spid" placeholder="Google Service Provider ID" class="txtbox" />
                 <label for=google_spid">Google Service Provider ID</label>
             </div>
+            <div class="item">
+                <h3>AWS Account Mappings</h3>
+                <p>Enter your AWS account IDs and friendly names (one per line, format: "accountId: Friendly Name")</p>
+                <textarea id="aws_account_mappings" placeholder="123456789012: Production&#10;234567890123: Development" class="textareabox"></textarea>
+                <button id="save_mappings" class="button">Save Account Mappings</button>
+                <div id="mapping_status" class="status-message"></div>
+            </div>
             <button>Save</button>
         </div>
     </body>
