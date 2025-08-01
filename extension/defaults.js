@@ -10,6 +10,8 @@ const defaults = {
 	platform: getPlatform(),
 	clientupdate: true,
 	idp_type: "google",
+	aws_account_mappings: "",
+	aws_account_mappings_parsed: {},
 };
 
 function getPlatform() {
