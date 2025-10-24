@@ -48,47 +48,90 @@ function populateCheckboxesAndButtons(props) {
 	}
 }
 
+function getSortedAccountsWithRoles(props, accountNames) {
+	const roleCount = Number.parseInt(props.roleCount);
+	const rolesByAccount = Array.from({ length: roleCount }, (_, i) => ({
+		index: i,
+		role: props[`role${i}`]
+	}))
+		.filter(({ role }) => role)
+		.reduce((acc, { index, role }) => {
+			const accountId = role.split(":")[0];
+			return {
+				...acc,
+				[accountId]: [...(acc[accountId] || []), { index, role }]
+			};
+		}, {});
+	
+	const sortedAccounts = Object.keys(rolesByAccount).sort((a, b) => {
+		const nameA = (accountNames[a] || a).toLowerCase();
+		const nameB = (accountNames[b] || b).toLowerCase();
+		return nameA.localeCompare(nameB);
+	});
+	
+	return { rolesByAccount, sortedAccounts };
+}
+
 async function buildMenu(props) {
 	$("#grid").empty();
-	for (let i = 0; i < Number.parseInt(props.roleCount); i++) {
+	
+	const accountNames = props.accountNames || {};
+	const { rolesByAccount, sortedAccounts } = getSortedAccountsWithRoles(props, accountNames);
+	
+	for (const accountId of sortedAccounts) {
+		const headerText = accountNames[accountId] || `Account ${accountId}`;
+		
 		jQuery("<div>", {
-			id: `item${i}`,
-			class: `item${i}`,
+			class: "account-header",
+			text: headerText
 		}).appendTo("#grid");
+		
+		const sortedRoles = [...rolesByAccount[accountId]]
+			.sort((a, b) => a.role.localeCompare(b.role));
+		
+		for (const roleInfo of sortedRoles) {
+			const i = roleInfo.index;
+			
+			jQuery("<div>", {
+				id: `item${i}`,
+				class: `item${i}`,
+			}).appendTo("#grid");
 
-		const textboxProperties = {
-			type: "text",
-			value: "",
-			id: `role${i}`,
-			placeholder: "Role",
-			class: "txtbox",
-			"data-index": i,
-		};
-		textboxProperties.readonly = "readonly";
-		$(".txtbox").css("pointer-events", "none");
-		jQuery("<input>", textboxProperties).appendTo(`#item${i}`);
+			const textboxProperties = {
+				type: "text",
+				value: "",
+				id: `role${i}`,
+				placeholder: "Role",
+				class: "txtbox",
+				"data-index": i,
+			};
+			textboxProperties.readonly = "readonly";
+			$(".txtbox").css("pointer-events", "none");
+			jQuery("<input>", textboxProperties).appendTo(`#item${i}`);
 
-		jQuery("<label>", {
-			id: `label${i}`,
-			class: "switch btncls",
-		}).appendTo(`#item${i}`);
+			jQuery("<label>", {
+				id: `label${i}`,
+				class: "switch btncls",
+			}).appendTo(`#item${i}`);
 
-		jQuery("<input>", {
-			type: "checkbox",
-			id: `enable${i}`,
-			"data-index": i,
-		}).appendTo(`#label${i}`);
+			jQuery("<input>", {
+				type: "checkbox",
+				id: `enable${i}`,
+				"data-index": i,
+			}).appendTo(`#label${i}`);
 
-		jQuery("<span>", {
-			class: "slider round",
-		}).appendTo(`#label${i}`);
+			jQuery("<span>", {
+				class: "slider round",
+			}).appendTo(`#label${i}`);
 
-		jQuery("<button>", {
-			class: "button clibtn",
-			id: `sts_button${i}`,
-			"data-index": i,
-		}).appendTo(`#item${i}`);
+			jQuery("<button>", {
+				class: "button clibtn",
+				id: `sts_button${i}`,
+				"data-index": i,
+			}).appendTo(`#item${i}`);
+		}
 	}
+	
 	handleTextboxes(props);
 	populateCheckboxesAndButtons(props);
 }

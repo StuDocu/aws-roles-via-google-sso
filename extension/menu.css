@@ -123,3 +123,16 @@ input:checked + .slider:before {
     z-index: 1;
     color: black;
 }
+
+.account-header {
+    font-weight: 600;
+    font-size: 14px;
+    margin-top: 10px;
+    border-bottom: 1px solid #ddd;
+    color: #000;
+    background-color: #fff;
+}
+
+.account-header:first-child {
+    margin-top: 0;
+}

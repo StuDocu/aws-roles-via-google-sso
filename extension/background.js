@@ -169,14 +169,18 @@ function refreshAwsRoles(port, samlResponse) {
 				const msg = `SAML fetch reponse returned error: ${errorCheck[1]}`;
 				throw msg;
 			}
-			let i = 0;
-			const parseGlobal = RegExp(roleParseRegex, "g");
-			let matches;
-			while ((matches = parseGlobal.exec(response)) !== null) {
-				storage.set({ [`role${i}`]: matches[1] });
-				++i;
-			}
-			storage.set({ roleCount: i });
+			
+			const samlAccountPattern = /.*Account:\s*([^<]+)<\/div>[\s\S]{0,500}?id="arn:aws:iam::(\d+)/gi;
+			const accountNames = Array.from(response.matchAll(samlAccountPattern))
+				.reduce((acc, match) => ({
+					...acc,
+					[match[2].trim()]: match[1].trim()
+				}), {});
+			
+			const roles = Array.from(response.matchAll(new RegExp(roleParseRegex, "g")));
+			roles.forEach((match, i) => storage.set({ [`role${i}`]: match[1] }));
+			
+			storage.set({ roleCount: roles.length, accountNames });
 			if (port) port.postMessage("roles_refreshed");
 		})
 		.catch((error) => {
