@@ -1,4 +1,10 @@
-.txtbox{
+.txtbox {
+    height: 30px;
+    width: 300px;
+    margin: 10px;
+}
+
+.selectbox {
     height: 30px;
     width: 300px;
     margin: 10px;

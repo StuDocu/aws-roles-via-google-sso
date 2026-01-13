@@ -1,29 +1,61 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
     <head>
         <title>AWS Roles via Google SSO</title>
         <script src="/js/jquery.min.js"></script>
         <script type="module" src="defaults.js"></script>
         <script type="module" src="options.js"></script>
-        <link rel="stylesheet" type="text/css" href="options.css">
+        <link rel="stylesheet" type="text/css" href="options.css" />
     </head>
     <body>
         <div>
             <div class="item">
-                <input type="text" id="saml_provider" placeholder="SAML Provider" class="txtbox" />
-                <label for="saml_provider">SAML Provider name as set in AWS.</label>
+                <input
+                    type="text"
+                    id="saml_provider"
+                    placeholder="SAML Provider"
+                    class="txtbox"
+                />
+                <label for="saml_provider"
+                    >SAML Provider name as set in AWS.</label
+                >
             </div>
             <div class="item">
-                <input type="text" id="organization_domain" placeholder="Organization domain name" class="txtbox" />
-                <label for="organization_domain">Your organization's domain name.</label>
+                <input
+                    type="text"
+                    id="organization_domain"
+                    placeholder="Organization domain name"
+                    class="txtbox"
+                />
+                <label for="organization_domain"
+                    >Your organization's domain name.</label
+                >
             </div>
             <div class="item">
-                <input type="text" id="google_idpid" placeholder="Google Identity Provider ID" class="txtbox" />
+                <input
+                    type="text"
+                    id="google_idpid"
+                    placeholder="Google Identity Provider ID"
+                    class="txtbox"
+                />
                 <label for="google_idpid">Google Identity Provider ID</label>
             </div>
             <div class="item">
-                <input type="text" id="google_spid" placeholder="Google Service Provider ID" class="txtbox" />
-                <label for=google_spid">Google Service Provider ID</label>
+                <input
+                    type="text"
+                    id="google_spid"
+                    placeholder="Google Service Provider ID"
+                    class="txtbox"
+                />
+                <label for="google_spid">Google Service Provider ID</label>
+            </div>
+            <div class="item">
+                <select id="container_id" class="selectbox">
+                    <option value="">Default (no container)</option>
+                </select>
+                <label for="container_id"
+                    >Firefox Container for Google account</label
+                >
             </div>
             <button>Save</button>
         </div>
