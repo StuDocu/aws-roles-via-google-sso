@@ -1,31 +1,33 @@
 {
-    "manifest_version": 2,
-    "name": "AWS Roles via Google SSO",
-    "description": "Stay logged in to AWS console and get STS credentials for CLI access.",
-    "version": "1.4.5",
-    "browser_action": {
-        "default_popup": "menu.html"
-    },
-    "icons": {
-        "16": "img/icon128.svg",
-        "48": "img/icon128.svg",
-        "96": "img/icon128.svg"
-    },
-    "permissions": [
-        "storage",
-        "alarms",
-        "*://*.google.com/*",
-        "*://*.aws.amazon.com/*",
-        "http://localhost/*",
-        "*://*.amazonaws.com/*"
-    ],
-    "background": {
-        "scripts": [
-            "background.js"
-        ]
-    },
-    "options_ui": {
-        "page": "options.html",
-        "open_in_tab": false
-    }
+  "manifest_version": 2,
+  "name": "AWS Roles via Google SSO",
+  "description": "Stay logged in to AWS console and get STS credentials for CLI access.",
+  "version": "1.4.6",
+  "browser_action": {
+    "default_popup": "menu.html"
+  },
+  "icons": {
+    "16": "img/icon128.svg",
+    "48": "img/icon128.svg",
+    "96": "img/icon128.svg"
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "cookies",
+    "contextualIdentities",
+    "webRequest",
+    "webRequestBlocking",
+    "*://*.google.com/*",
+    "*://*.aws.amazon.com/*",
+    "http://localhost/*",
+    "*://*.amazonaws.com/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
 }
