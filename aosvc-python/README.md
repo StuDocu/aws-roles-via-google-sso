@@ -35,6 +35,6 @@ cd aosvc-python
 ./install_mac.sh
 ```
 
-The script will install the python script in `~/.local/share/aosvc/bin/` and the service unit file in `~/Library/LaunchAgents. The service is loaded as a launchd service and will update the `default` profile in `~/.aws/credentials` for the installing user.
+The script will install the python script in `~/.local/share/aosvc/bin/` and the service unit file in `~/Library/LaunchAgents`. The service is loaded as a launchd service and will update the `default` profile in `~/.aws/credentials` for the installing user.
 
 There's also an `uninstall_mac.sh` for removal.
