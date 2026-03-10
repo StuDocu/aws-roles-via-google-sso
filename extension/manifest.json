@@ -18,6 +18,7 @@
     "host_permissions": [
         "https://accounts.google.com/*",
         "https://signin.aws.amazon.com/*",
+        "https://*.console.aws.amazon.com/*",
         "https://console.aws.amazon.com/*",
         "https://sts.amazonaws.com/*",
         "http://localhost/*"
