@@ -75,6 +75,6 @@ netstat
 ##### Installation
 1. Clone this repo
 2. `cd aosvc-python`
-3. `./install.sh`
+3. `./install_mac.sh`
 
 More info [here](/aosvc-python/README.md).
