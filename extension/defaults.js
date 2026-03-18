@@ -10,6 +10,7 @@ const defaults = {
 	platform: getPlatform(),
 	clientupdate: true,
 	idp_type: "google",
+	env_file_paths: "",
 };
 
 function getPlatform() {

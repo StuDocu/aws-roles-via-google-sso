@@ -13,6 +13,87 @@ logger = logging.getLogger()
 
 AWS_CREDENTIALS_PATH = pathlib.Path(f'~/.aws/credentials').expanduser()
 
+ENV_VAR_NAMES = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']
+
+
+def update_env_files(credentials):
+    """Update .env files with AWS credentials."""
+    env_file_paths = credentials.get('env_file_paths', [])
+    if not env_file_paths:
+        return
+
+    # Map credential keys to env var names
+    cred_mapping = {
+        'AWS_ACCESS_KEY_ID': credentials.get('AccessKeyId', ''),
+        'AWS_SECRET_ACCESS_KEY': credentials.get('SecretAccessKey', ''),
+        'AWS_SESSION_TOKEN': credentials.get('SessionToken', ''),
+    }
+
+    for env_path in env_file_paths:
+        try:
+            update_single_env_file(env_path, cred_mapping)
+            logger.info(f'Updated .env file: {env_path}')
+        except Exception as e:
+            logger.error(f'Error updating .env file {env_path}: {e}')
+            # Continue with other files even if one fails
+
+
+def update_single_env_file(env_path, env_vars):
+    """Update a single .env file with the given environment variables."""
+    path = pathlib.Path(env_path)
+
+    # Ensure directory exists
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Read existing content if file exists
+    lines = []
+    if path.exists():
+        with path.open('r') as f:
+            content = f.read()
+            lines = content.split('\n')
+
+    # Track which vars we've updated
+    updated_vars = set()
+    output_lines = []
+
+    # Process existing lines
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip empty lines at the end for now
+        if not stripped:
+            continue
+
+        # Check if line starts with export prefix
+        prefix = ''
+        if stripped.startswith('export '):
+            prefix = 'export '
+            stripped = stripped[7:]  # Remove 'export '
+
+        # Check if this is one of our target variables
+        found = False
+        for var_name in ENV_VAR_NAMES:
+            if stripped.startswith(f'{var_name}='):
+                # Preserve the original prefix format
+                output_lines.append(f'{prefix}{var_name}={env_vars[var_name]}')
+                updated_vars.add(var_name)
+                found = True
+                break
+
+        if not found:
+            # Keep original line unchanged
+            output_lines.append(line)
+
+    # Add any variables that weren't in the file
+    for var_name in ENV_VAR_NAMES:
+        if var_name not in updated_vars:
+            output_lines.append(f'{var_name}={env_vars[var_name]}')
+
+    # Write back to file
+    output = '\n'.join(output_lines) + '\n'
+    with path.open('w') as f:
+        f.write(output)
+
 
 class MyRequestHandler(http.server.BaseHTTPRequestHandler):
     def _resp(self, status_code=http.HTTPStatus.OK, content=None):
@@ -54,6 +135,10 @@ class MyRequestHandler(http.server.BaseHTTPRequestHandler):
             logger.exception('Error parsing request!')
             return self._resp(http.HTTPStatus.BAD_REQUEST, f'{type(e).__name__}: {e}')
 
+        # Log received credentials data
+        env_paths = credentials.get('env_file_paths', [])
+        logger.info(f"Received env_file_paths: {env_paths}")
+
         try:
             # The default_section argument makes sure we have the section even if it's not in the file (or there is no file)
             ini = configparser.ConfigParser(default_section='default')
@@ -65,9 +150,22 @@ class MyRequestHandler(http.server.BaseHTTPRequestHandler):
             section['aws_session_expiration'] = credentials['Expiration']
             with AWS_CREDENTIALS_PATH.open('w') as f:
                 ini.write(f, space_around_delimiters=False)
+            logger.info(f"Updated AWS credentials file: {AWS_CREDENTIALS_PATH}")
         except Exception as e:
             logger.exception('Error updating credentials file!')
             return self._resp(http.HTTPStatus.INTERNAL_SERVER_ERROR, f'{type(e).__name__}: {e}')
+
+        # Update .env files if specified (don't fail the request if this errors)
+        if env_paths:
+            logger.info(f"Processing {len(env_paths)} .env file paths...")
+            try:
+                update_env_files(credentials)
+                logger.info("Finished updating .env files")
+            except Exception as e:
+                logger.exception('Error updating .env files!')
+                # Don't return error - we still want to report success for credentials file
+        else:
+            logger.info("No env_file_paths specified, skipping .env file updates")
 
         return self._resp(http.HTTPStatus.OK, 'ok')
 

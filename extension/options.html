@@ -23,7 +23,12 @@
             </div>
             <div class="item">
                 <input type="text" id="google_spid" placeholder="Google Service Provider ID" class="txtbox" />
-                <label for=google_spid">Google Service Provider ID</label>
+                <label for="google_spid">Google Service Provider ID</label>
+            </div>
+            <div class="item">
+                <textarea id="env_file_paths" placeholder="/path/to/project1
+/path/to/project2" class="txtbox" rows="4"></textarea>
+                <label for="env_file_paths">Project directories to auto-update (one per line). A .env file will be created/updated in each directory with AWS credentials.</label>
             </div>
             <button>Save</button>
         </div>

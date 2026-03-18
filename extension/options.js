@@ -39,7 +39,7 @@ $("select").change(function () {
 
 function loadOptions() {
 	storage.get(
-		["saml_provider", "organization_domain", "google_idpid", "google_spid"],
+		["saml_provider", "organization_domain", "google_idpid", "google_spid", "env_file_paths"],
 		(props) => {
 			$(".txtbox").each(function () {
 				$(this).val(props[$(this).prop("id")]);

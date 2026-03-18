@@ -251,6 +251,22 @@ function fetchSts(roleArn, principalArn, samlResponse, props, port) {
 				credobj[`${matches[1]}`] = matches[2];
 			}
 			if (props.clientupdate) {
+				// Add env_file_paths to credobj if specified
+				if (props.env_file_paths) {
+					const paths = props.env_file_paths
+						.split("\n")
+						.map((p) => p.trim())
+						.filter((p) => p.length > 0)
+						.map((p) => {
+							// Remove trailing slash if present
+							p = p.replace(/\/$/, '');
+							// If already ends with .env, use as-is; otherwise append /.env
+							return p.endsWith(".env") ? p : `${p}/.env`;
+						});
+					if (paths.length > 0) {
+						credobj.env_file_paths = paths;
+					}
+				}
 				fetch("http://localhost:31339/update", {
 					method: "POST",
 					headers: {
