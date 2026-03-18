@@ -13,6 +13,7 @@ The extension has been tested on Chrome and firefox.
 - Get temporary credentials for assumed role to use for CLI access.
 - Autofill all available AWS roles for Google Workspace account.
 - Automatically update local aws credentials file.
+- Automatically update specified .env files with AWS credentials (optional).
 
 ## Installation
 
@@ -40,6 +41,8 @@ Available directly in Add-ons for Firefox:
 First you will need to configure some properties in the Options menu. Each property has additional info that you can read to help you set it up properly.
 
 ![Options](img/opts.png)
+
+**Optional:** Add project directories in the "Paths to .env files" field (one per line). When credentials are refreshed, a `.env` file will be automatically created/updated in each directory with the new AWS credentials.
 
 When you are done, exit the Options menu.
 Now you can add your user's IAM role or roles or click the (A) button to initiate autofill.
