@@ -27,12 +27,13 @@ const requestHeaders = {
 const storage = getApi().storage.local;
 
 function getApi() {
+  if (typeof browser !== "undefined") {
+    return browser;
+  }
   if (typeof chrome !== "undefined") {
-    if (typeof browser !== "undefined") {
-      return browser;
-    }
     return chrome;
   }
+  return undefined;
 }
 
 // Cookie injection state
@@ -40,31 +41,42 @@ let activeCookieStoreId = null;
 let pendingCookies = new Map(); // Map of URL -> cookie header string
 
 // Set up webRequest listener to inject cookies
-getApi().webRequest.onBeforeSendHeaders.addListener(
-  function (details) {
-    if (!activeCookieStoreId) {
+const api = getApi();
+const canInjectCookies =
+  api?.webRequest?.onBeforeSendHeaders &&
+  typeof api.webRequest.onBeforeSendHeaders.addListener === "function";
+
+if (canInjectCookies) {
+  api.webRequest.onBeforeSendHeaders.addListener(
+    function (details) {
+      if (!activeCookieStoreId) {
+        return { requestHeaders: details.requestHeaders };
+      }
+
+      const url = new URL(details.url);
+      const cookieKey = `${url.protocol}//${url.hostname}`;
+      const cookieHeader = pendingCookies.get(cookieKey);
+
+      if (cookieHeader) {
+        // Remove existing Cookie header if present
+        const headers = details.requestHeaders.filter(
+          (h) => h.name.toLowerCase() !== "cookie",
+        );
+        // Add our cookie header
+        headers.push({ name: "Cookie", value: cookieHeader });
+        return { requestHeaders: headers };
+      }
+
       return { requestHeaders: details.requestHeaders };
-    }
-
-    const url = new URL(details.url);
-    const cookieKey = `${url.protocol}//${url.hostname}`;
-    const cookieHeader = pendingCookies.get(cookieKey);
-
-    if (cookieHeader) {
-      // Remove existing Cookie header if present
-      const headers = details.requestHeaders.filter(
-        (h) => h.name.toLowerCase() !== "cookie",
-      );
-      // Add our cookie header
-      headers.push({ name: "Cookie", value: cookieHeader });
-      return { requestHeaders: headers };
-    }
-
-    return { requestHeaders: details.requestHeaders };
-  },
-  { urls: ["*://*.google.com/*"] },
-  ["blocking", "requestHeaders"],
-);
+    },
+    { urls: ["*://*.google.com/*"] },
+    ["blocking", "requestHeaders"],
+  );
+} else {
+  console.warn(
+    "webRequest.onBeforeSendHeaders is unavailable; container cookie injection is disabled.",
+  );
+}
 
 // Helper function to get cookies from a container and prepare them for injection
 async function prepareCookiesForUrl(url, cookieStoreId) {
