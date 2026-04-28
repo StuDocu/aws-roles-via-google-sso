@@ -55,14 +55,25 @@ class MyRequestHandler(http.server.BaseHTTPRequestHandler):
             return self._resp(http.HTTPStatus.BAD_REQUEST, f'{type(e).__name__}: {e}')
 
         try:
+            profile_name = credentials.get('ProfileName')
+
             # The default_section argument makes sure we have the section even if it's not in the file (or there is no file)
             ini = configparser.ConfigParser(default_section='default')
             ini.read(AWS_CREDENTIALS_PATH)
-            section = ini['default']
-            section['aws_access_key_id'] = credentials['AccessKeyId']
-            section['aws_secret_access_key'] = credentials['SecretAccessKey']
-            section['aws_session_token'] = credentials['SessionToken']
-            section['aws_session_expiration'] = credentials['Expiration']
+
+            def write_section(section):
+                section['aws_access_key_id'] = credentials['AccessKeyId']
+                section['aws_secret_access_key'] = credentials['SecretAccessKey']
+                section['aws_session_token'] = credentials['SessionToken']
+                section['aws_session_expiration'] = credentials['Expiration']
+
+            write_section(ini['default'])
+
+            if profile_name:
+                if profile_name not in ini:
+                    ini[profile_name] = {}
+                write_section(ini[profile_name])
+
             with AWS_CREDENTIALS_PATH.open('w') as f:
                 ini.write(f, space_around_delimiters=False)
         except Exception as e:

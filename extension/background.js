@@ -235,6 +235,7 @@ function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
   const roleArn = arnPrefix + role;
   const awsAccount = roleArn.split(":")[4];
   const principalArn = `${arnPrefix}${awsAccount}:saml-provider/${props.saml_provider}`;
+  const accountName = ((props.accountNames || {})[awsAccount] || '').replace(/\s*\(\d+\)\s*$/, '') || undefined;
   const data = `RelayState=&SAMLResponse=${encodeURIComponent(samlResponse)}&name=&portal=&roleIndex=${encodeURIComponent(roleArn)}`;
   fetch(awsSamlUrl, {
     method: "POST",
@@ -250,7 +251,7 @@ function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
       }
       const date = new Date().toLocaleString();
       console.log(`AWS AlwaysON refreshed tokens successfuly at ${date}`);
-      fetchSts(roleArn, principalArn, samlResponse, props, port);
+      fetchSts(roleArn, principalArn, samlResponse, props, port, accountName);
     })
     .catch((error) => {
       const msg = `Error in SAML fetch:${error}`;
@@ -343,7 +344,7 @@ async function awsInit(props, port = null, jobType = "refresh") {
   }
 }
 
-function fetchSts(roleArn, principalArn, samlResponse, props, port) {
+function fetchSts(roleArn, principalArn, samlResponse, props, port, profileName) {
   const formBody = new URLSearchParams({
     Version: "2011-06-15",
     Action: "AssumeRoleWithSAML",
@@ -371,6 +372,7 @@ function fetchSts(roleArn, principalArn, samlResponse, props, port) {
         storage.set({ [`aws${matches[1]}`]: matches[2] });
         credobj[`${matches[1]}`] = matches[2];
       }
+      if (profileName) credobj['ProfileName'] = profileName;
       if (props.clientupdate) {
         fetch("http://localhost:31339/update", {
           method: "POST",

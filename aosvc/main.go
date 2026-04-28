@@ -32,10 +32,11 @@ type program struct {
 }
 
 type Credentials struct {
-    AccessKeyId string
+    AccessKeyId     string
 	SecretAccessKey string
-	SessionToken string
-	Expiration string
+	SessionToken    string
+	Expiration      string
+	ProfileName     string
 }
 
 func main() {
@@ -126,6 +127,15 @@ func (p *program) updateCredFile(creds Credentials) error {
 	cfg.Section("default").Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
 	cfg.Section("default").Key("aws_session_token").SetValue(creds.SessionToken)
 	cfg.Section("default").Key("aws_session_expiration").SetValue(creds.Expiration)
+	log.Printf("updated default section")
+	if creds.ProfileName != "" {
+		cfg.DeleteSection(creds.ProfileName)
+		cfg.NewSection(creds.ProfileName)
+		cfg.Section(creds.ProfileName).Key("aws_access_key_id").SetValue(creds.AccessKeyId)
+		cfg.Section(creds.ProfileName).Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
+		cfg.Section(creds.ProfileName).Key("aws_session_token").SetValue(creds.SessionToken)
+		cfg.Section(creds.ProfileName).Key("aws_session_expiration").SetValue(creds.Expiration)
+	}
 	cfg.SaveTo(filePath+"credentials")
 	log.Printf("updated %vcredentials file", filePath)
 	return nil
