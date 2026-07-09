@@ -36,6 +36,14 @@ function getApi() {
   return undefined;
 }
 
+function supportsBlockingWebRequest(api) {
+  try {
+    return api?.runtime?.getManifest?.().manifest_version <= 2;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Cookie injection state
 let activeCookieStoreId = null;
 let pendingCookies = new Map(); // Map of URL -> cookie header string
@@ -44,7 +52,8 @@ let pendingCookies = new Map(); // Map of URL -> cookie header string
 const api = getApi();
 const canInjectCookies =
   api?.webRequest?.onBeforeSendHeaders &&
-  typeof api.webRequest.onBeforeSendHeaders.addListener === "function";
+  typeof api.webRequest.onBeforeSendHeaders.addListener === "function" &&
+  supportsBlockingWebRequest(api);
 
 if (canInjectCookies) {
   api.webRequest.onBeforeSendHeaders.addListener(
