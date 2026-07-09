@@ -75,3 +75,10 @@ netstat
 3. `./install_mac.sh`
 
 More info [here](/aosvc-python/README.md).
+
+## FAQ
+**Question:** Why can't I see the roles?
+
+> **Answer:** The extension only shows AWS roles that are assigned to your Google Workspace account via SSO. If you see no roles (or fewer than expected), your account may not yet be in the right Google groups — for example, the `developer` group.
+>
+> Access to specific AWS accounts (e.g. Studeersnel, DataEngineering) depends on being in the corresponding groups/roles. Ask your team lead or IT to confirm your group memberships if you’re missing access.
