@@ -10,5 +10,6 @@ mkdir -p "$service_path"
 mkdir -p "$launch_config_dir"
 cp aosvc "$service_path"
 cp aosvc.plist "$launch_config_path"
+launchctl bootout "gui/$user_uid/aosvc" 2>/dev/null || true
 launchctl bootstrap "gui/$user_uid" "$launch_config_path"
 launchctl start aosvc
