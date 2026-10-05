@@ -1,4 +1,5 @@
 const storage = getApi().storage.local;
+const MAX_PINNED_ROLES = 5;
 
 document.querySelector("#go-to-options").addEventListener("click", () => {
 	if (chrome.runtime.openOptionsPage) {
@@ -8,8 +9,46 @@ document.querySelector("#go-to-options").addEventListener("click", () => {
 	}
 });
 
+function migratePinnedIndices(props) {
+	if (
+		(!props.pinnedIndices || props.pinnedIndices.length === 0) &&
+		typeof props.checked === "string" &&
+		props.checked.startsWith("role")
+	) {
+		const n = Number.parseInt(props.checked.replace("role", ""), 10);
+		if (!Number.isNaN(n)) {
+			props.pinnedIndices = [n];
+			storage.set({ pinnedIndices: [n] });
+		}
+	}
+	if (!props.pinnedIndices) {
+		props.pinnedIndices = [];
+	}
+	return props;
+}
+
+function slugPart(value) {
+	return String(value)
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+// Keep in sync with profileSlugForIndex in background.js.
+function profileSlugForIndex(props, index) {
+	const role = props[`role${index}`];
+	if (!role) return "";
+	const accountId = role.split(":")[0];
+	const roleName = role.includes("/") ? role.split("/").pop() : role;
+	const rawName = (props.accountNames || {})[accountId] || accountId;
+	const accountLabel = String(rawName).replace(/\s*\(\d+\)\s*$/, "");
+	const accountSlug = slugPart(accountLabel);
+	const roleSlug = slugPart(roleName);
+	if (!accountSlug || !roleSlug) return "";
+	return `${accountSlug}-${roleSlug}`;
+}
+
 function handleTextboxes(props) {
-	//populate the textboxes from local storage
 	$("input[id^='role']").each(function () {
 		if ($(this).prop("readonly")) {
 			$(this).css("background-color", "#cccccc");
@@ -25,26 +64,21 @@ function handleTextboxes(props) {
 }
 
 function populateCheckboxesAndButtons(props) {
-	//get the currently checked checkbox
-	if (typeof props.checked !== "undefined") {
-		const dataIndex = $(`#${props.checked}`).attr("data-index");
-		//find the checkbox with the same data-index as the role and set it as checked.
-		$(`input[id^='enable'][type='checkbox'][data-index=${dataIndex}]`).each(
-			function () {
-				$(this).prop("checked", true);
-			},
-		);
-		//enable the relevant sts button if something is already checked.
-		$(`[id^='sts_button'][data-index=${dataIndex}]`).each(function () {
-			if (props.last_msg.includes("err")) {
-				$(this).css("background-image", "url(/img/err.png)");
-				$(this).css("visibility", "visible");
-				$(this).css("pointer-events", "none");
-				$("#msg").text(props.last_msg_detail);
-			} else {
-				$(this).css("visibility", "visible");
-			}
-		});
+	const pinned = props.pinnedIndices || [];
+	for (const dataIndex of pinned) {
+		$(`#enable${dataIndex}`).prop("checked", true);
+		const btn = $(`#sts_button${dataIndex}`);
+		if (props.last_msg && props.last_msg.includes("err")) {
+			btn.css("background-image", "url(/img/err.png)");
+			btn.css("visibility", "visible");
+			btn.css("pointer-events", "none");
+			$("#msg").text(props.last_msg_detail);
+		} else if (props.stsByIndex && props.stsByIndex[dataIndex]) {
+			btn.css("background-image", "url(/img/cli.png)");
+			btn.css("visibility", "visible");
+			btn.css("pointer-events", "");
+			btn.prop("title", "Click to copy STS credentials to clipboard.");
+		}
 	}
 }
 
@@ -94,7 +128,7 @@ async function buildMenu(props) {
 			
 			jQuery("<div>", {
 				id: `item${i}`,
-				class: `item${i}`,
+				class: `item${i} role-row`,
 			}).appendTo("#grid");
 
 			const textboxProperties = {
@@ -108,6 +142,14 @@ async function buildMenu(props) {
 			textboxProperties.readonly = "readonly";
 			$(".txtbox").css("pointer-events", "none");
 			jQuery("<input>", textboxProperties).appendTo(`#item${i}`);
+
+			const slug = profileSlugForIndex(props, i);
+			jQuery("<span>", {
+				id: `profileSlug${i}`,
+				class: "profile-slug",
+				text: slug,
+				title: slug,
+			}).appendTo(`#item${i}`);
 
 			jQuery("<label>", {
 				id: `label${i}`,
@@ -144,14 +186,62 @@ function getApi() {
 		return chrome;
 	}
 }
+
+function getPinnedIndicesFromDom() {
+	const pinned = [];
+	$("input[id^='enable'][type='checkbox']:checked").each(function () {
+		pinned.push(Number.parseInt($(this).attr("data-index"), 10));
+	});
+	return pinned;
+}
+
+function showLoadingForPinned(pinned) {
+	$("[id^='sts_button']").css("visibility", "hidden");
+	for (const dataIndex of pinned) {
+		const btn = $(`#sts_button${dataIndex}`);
+		btn.css("background-image", "url(/img/loading.gif)");
+		btn.css("visibility", "visible");
+		btn.css("pointer-events", "none");
+	}
+}
+
+function enableStsButtonsForPinned(pinned) {
+	storage.get(["stsByIndex"], (result) => {
+		const stsByIndex = result.stsByIndex || {};
+		for (const dataIndex of pinned) {
+			const btn = $(`#sts_button${dataIndex}`);
+			const creds = stsByIndex[dataIndex] ?? stsByIndex[String(dataIndex)];
+			if (creds) {
+				btn.css("background-image", "url(/img/cli.png)");
+				btn.prop("title", "Click to copy STS credentials to clipboard.");
+				btn.css("pointer-events", "");
+				btn.css("visibility", "visible");
+			} else {
+				btn.css("background-image", "url(/img/err.png)");
+				btn.css("visibility", "visible");
+				btn.css("pointer-events", "none");
+			}
+		}
+	});
+}
+
+function markStsButtonsError(pinned) {
+	for (const dataIndex of pinned) {
+		$(`#sts_button${dataIndex}`).css("background-image", "url(/img/err.png)");
+	}
+	storage.get(["last_msg_detail"], (result) => {
+		$("#msg").text(result.last_msg_detail);
+	});
+}
+
 async function main() {
-	//need to refresh it again..
 	const props = await storage.get(null);
 	if (props.roleCount === undefined) {
 		storage.set({ roleCount: 1 });
 		$("#go-to-options").click();
 	}
 
+	migratePinnedIndices(props);
 	buildMenu(props);
 
 	$("#clibtn").hover(function () {
@@ -177,119 +267,96 @@ async function main() {
 		});
 	});
 
-	//uncheck all checkboxes when modifying role ARNs
 	$("input[id^='role']").focus(() => {
-		$("input[id^='enable'][type='checkbox']").each(function (index, obj) {
+		$("input[id^='enable'][type='checkbox']").each(function () {
 			$(this).prop("checked", false);
 		});
+		storage.set({ pinnedIndices: [] });
 		const port = chrome.runtime.connect({
 			name: "talk to background.js",
 		});
 		port.postMessage("refreshoff");
 	});
-	//Save data to local storage automatically when not focusing on TxtBox
 	$("input[id^='role']").focusout(function () {
 		const roleName = $(this).attr("id");
 		const roleValue = $(this).val();
-		const obj = {
-			[roleName]: roleValue,
-		};
-		storage.set(obj);
+		storage.set({ [roleName]: roleValue });
 	});
-	//get the STS token from storage when clicking the CLI button.
+
 	$('[id^="sts_button"]').click(function () {
 		const index = $(this).attr("data-index");
 		if ($(`#enable${index}`).prop("checked")) {
-			storage.get(
-				[
-					"platform",
-					"awsAccessKeyId",
-					"awsSecretAccessKey",
-					"awsSessionToken",
-					"awsExpiration",
-				],
-				(data) => {
-					let stsCommand;
-					switch (data.platform.toLowerCase()) {
-						case "windows":
-						case "win32":
-							stsCommand = "set";
-							break;
-						default:
-							stsCommand = "export";
-					}
-					const stscli = `${stsCommand} AWS_ACCESS_KEY_ID=${data.awsAccessKeyId} && ${stsCommand} AWS_SECRET_ACCESS_KEY=${data.awsSecretAccessKey} && ${stsCommand} AWS_SESSION_TOKEN=${data.awsSessionToken} && ${stsCommand} AWS_SESSION_EXPIRATION=${data.awsExpiration}`;
-					navigator.clipboard.writeText(stscli).then(
-						() => {
-							alert("token copied to clipboard");
-						},
-						() => {
-							alert("failed copying to clipboard");
-						},
-					);
-				},
-			);
+			storage.get(["platform", "stsByIndex"], (data) => {
+				const byIndex = data.stsByIndex || {};
+				const creds = byIndex[index] ?? byIndex[String(index)];
+				if (!creds) {
+					alert("No STS credentials for this pin yet.");
+					return;
+				}
+				let stsCommand;
+				switch (data.platform.toLowerCase()) {
+					case "windows":
+					case "win32":
+						stsCommand = "set";
+						break;
+					default:
+						stsCommand = "export";
+				}
+				const stscli = `${stsCommand} AWS_ACCESS_KEY_ID=${creds.AccessKeyId} && ${stsCommand} AWS_SECRET_ACCESS_KEY=${creds.SecretAccessKey} && ${stsCommand} AWS_SESSION_TOKEN=${creds.SessionToken} && ${stsCommand} AWS_SESSION_EXPIRATION=${creds.Expiration}`;
+				navigator.clipboard.writeText(stscli).then(
+					() => {
+						alert("token copied to clipboard");
+					},
+					() => {
+						alert("failed copying to clipboard");
+					},
+				);
+			});
 		}
 	});
-	//Action when a checkbox is changed
+
 	$("input[id^='enable'][type='checkbox']").change(function () {
 		$("#msg").text("");
-		const id = $(this).attr("id");
-		const dataIndex = $(this).attr("data-index");
-		// hide all sts buttons
-		$("[id^='sts_button']").each(function () {
-			$(this).css("visibility", "hidden");
-		});
-		if (!this.checked) {
-			const port = chrome.runtime.connect({
-				name: "talk to background.js",
-			});
-			port.postMessage("refreshoff");
-		} else {
-			//uncheck other checkboxes.
-			$("input[id^='enable'][type='checkbox']").each(function () {
-				if ($(this).attr("id") !== id) {
-					$(this).prop("checked", false);
-				}
-			});
-			//enable sts loading button
-			$(`[id^='sts_button'][data-index=${dataIndex}]`).each(function () {
-				$(this).css("background-image", "url(/img/loading.gif)");
-				$(this).css("visibility", "visible");
-				$(this).css("pointer-events", "none");
-			});
-			//set the roleTxtBox with the same data-index as the as checked.
-			$(`input[id^='role'][data-index=${dataIndex}]`).each(function () {
-				storage.set({ checked: $(this).attr("id") });
-			});
-			//start background service functions
-			const port = chrome.runtime.connect({
-				name: "talk to background.js",
-			});
-			port.postMessage("refreshon");
-			port.onMessage.addListener((msg) => {
-				//if sts fetch went fine enable the cli button.
-				if (msg === "sts_ready") {
-					$(`[id^='sts_button'][data-index=${dataIndex}]`).each(function () {
-						$(this).css("background-image", "url(/img/cli.png)");
-						$(this).prop(
-							"title",
-							"Click to copy STS credentials to clipboard.",
-						);
-						$(this).css("pointer-events", "");
-					});
-				} else if (msg.includes("err")) {
-					$(`[id^='sts_button'][data-index=${dataIndex}]`).each(function () {
-						$(this).css("background-image", "url(/img/err.png)");
-						storage.get(["last_msg_detail"], (result) => {
-							$("#msg").text(result.last_msg_detail);
-						});
-					});
-				} else {
-					console.log(`Service worker response: ${msg}`);
-				}
-			});
+		const wasChecked = this.checked;
+
+		if (wasChecked) {
+			const currentPinned = getPinnedIndicesFromDom();
+			if (currentPinned.length > MAX_PINNED_ROLES) {
+				$(this).prop("checked", false);
+				$("#msg").text(`You can pin at most ${MAX_PINNED_ROLES} roles.`);
+				return;
+			}
 		}
+
+		const pinned = getPinnedIndicesFromDom();
+		storage.set({ pinnedIndices: pinned });
+
+		const port = chrome.runtime.connect({
+			name: "talk to background.js",
+		});
+
+		if (pinned.length === 0) {
+			port.postMessage("refreshoff");
+			$("[id^='sts_button']").css("visibility", "hidden");
+			return;
+		}
+
+		showLoadingForPinned(pinned);
+		port.postMessage("refreshon");
+		port.onMessage.addListener((msg) => {
+			if (msg === "sts_ready") {
+				enableStsButtonsForPinned(pinned);
+				storage.get(["last_msg_detail"], (result) => {
+					if (result.last_msg_detail && result.last_msg_detail !== "success") {
+						$("#msg").text(result.last_msg_detail);
+					}
+				});
+			} else if (msg.includes("err")) {
+				markStsButtonsError(pinned);
+			} else {
+				console.log(`Service worker response: ${msg}`);
+			}
+		});
 	});
 }
 

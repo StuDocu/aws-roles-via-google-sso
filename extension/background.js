@@ -25,7 +25,6 @@ const requestHeaders = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 const storage = getApi().storage.local;
-
 function getApi() {
   if (typeof browser !== "undefined") {
     return browser;
@@ -152,8 +151,6 @@ class portWithExceptions {
         port.postMessage(message);
       } catch (err) {
         console.log(`Error while posting message back to menu. ${err}`);
-      } finally {
-        storage.set({ last_msg_detail: message });
       }
     };
     this.postError = (message) => {
@@ -169,18 +166,40 @@ class portWithExceptions {
   }
 }
 
+function migratePinnedIndices(props) {
+  if (
+    (!props.pinnedIndices || props.pinnedIndices.length === 0) &&
+    typeof props.checked === "string" &&
+    props.checked.startsWith("role")
+  ) {
+    const n = Number.parseInt(props.checked.replace("role", ""), 10);
+    if (!Number.isNaN(n)) {
+      props.pinnedIndices = [n];
+      storage.set({ pinnedIndices: [n] });
+    }
+  }
+  if (!props.pinnedIndices) {
+    props.pinnedIndices = [];
+  }
+  return props;
+}
+
 getApi().runtime.onStartup.addListener(() => {
   storage.get(null, (props) => {
     if (props.autofill === undefined) storage.set({ autofill: 0 });
+    props = migratePinnedIndices(props);
     if (props.autofill === 1) {
       awsInit(props, null, "role_refresh");
     }
-    if (confCheck(props)) awsInit(props);
+    if (confCheck(props) && props.pinnedIndices.length > 0) {
+      awsInit(props);
+    }
   });
 });
 
 getApi().alarms.onAlarm.addListener((alarm) => {
   storage.get(null, (props) => {
+    props = migratePinnedIndices(props);
     awsInit(props);
   });
 });
@@ -191,14 +210,14 @@ async function main() {
     port.onMessage.addListener(async (msg) => {
       //Stop all background schedule jobs.
       if (msg === "refreshoff") {
-        storage.set({ checked: 0 });
         getApi().alarms.clear("refreshToken");
         cleanupCookieInjection();
       }
       //Start background role refresh
       if (msg === "refreshon") {
         storage.get(null, (props) => {
-          if (confCheck(props)) {
+          props = migratePinnedIndices(props);
+          if (confCheck(props) && props.pinnedIndices.length > 0) {
             getApi().alarms.create("refreshToken", {
               periodInMinutes: Number.parseInt(props.refresh_interval),
             });
@@ -239,33 +258,207 @@ function errHandler(port, msg) {
   }
 }
 
-function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
-  const role = props[props.checked];
-  const roleArn = arnPrefix + role;
+function roleArnForIndex(props, index) {
+  const role = props[`role${index}`];
+  if (!role) return null;
+  return arnPrefix + role;
+}
+
+function slugPart(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Keep in sync with profileSlugForIndex in menu.js.
+function profileSlugForIndex(props, index) {
+  const role = props[`role${index}`];
+  if (!role) return "";
+  const accountId = role.split(":")[0];
+  const roleName = role.includes("/") ? role.split("/").pop() : role;
+  const rawName = (props.accountNames || {})[accountId] || accountId;
+  const accountLabel = String(rawName).replace(/\s*\(\d+\)\s*$/, "");
+  const accountSlug = slugPart(accountLabel);
+  const roleSlug = slugPart(roleName);
+  if (!accountSlug || !roleSlug) return "";
+  return `${accountSlug}-${roleSlug}`;
+}
+
+function principalArnForRoleArn(roleArn, props) {
   const awsAccount = roleArn.split(":")[4];
-  const principalArn = `${arnPrefix}${awsAccount}:saml-provider/${props.saml_provider}`;
-  const accountName = ((props.accountNames || {})[awsAccount] || '').replace(/\s*\(\d+\)\s*$/, '') || undefined;
+  return `${arnPrefix}${awsAccount}:saml-provider/${props.saml_provider}`;
+}
+
+async function postConsoleSaml(props, samlResponse, roleIndex) {
+  const roleArn = roleArnForIndex(props, roleIndex);
+  if (!roleArn) return;
   const data = `RelayState=&SAMLResponse=${encodeURIComponent(samlResponse)}&name=&portal=&roleIndex=${encodeURIComponent(roleArn)}`;
-  fetch(awsSamlUrl, {
+  const response = await fetch(awsSamlUrl, {
     method: "POST",
     body: data,
     headers: requestHeaders,
-  })
-    .then((response) => response.text())
-    .then((response) => {
-      const errorCheck = response.match(samlFetchErrorRegex);
-      if (errorCheck) {
-        const msg = `SAML fetch reponse returned error: ${errorCheck[1]}`;
-        throw msg;
+  });
+  const text = await response.text();
+  const errorCheck = text.match(samlFetchErrorRegex);
+  if (errorCheck) {
+    throw new Error(`SAML fetch reponse returned error: ${errorCheck[1]}`);
+  }
+  const date = new Date().toLocaleString();
+  console.log(`AWS AlwaysON refreshed console tokens successfuly at ${date}`);
+}
+
+async function assumeRoleWithSAML(roleArn, principalArn, samlResponse, props) {
+  const formBody = new URLSearchParams({
+    Version: "2011-06-15",
+    Action: "AssumeRoleWithSAML",
+    RoleArn: roleArn,
+    PrincipalArn: principalArn,
+    SAMLAssertion: samlResponse.trim(),
+    DurationSeconds: props.session_duration,
+  }).toString();
+
+  const response = await fetch(awsStsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "*/*",
+    },
+    body: formBody,
+  });
+  const data = await response.text();
+  const parseGlobal = RegExp(stsTokenRegex, "g");
+  let matches;
+  const credobj = {};
+  while ((matches = parseGlobal.exec(data)) !== null) {
+    matches = matches.filter((i) => i != null);
+    credobj[matches[1]] = matches[2];
+  }
+  if (
+    !credobj.AccessKeyId ||
+    !credobj.SecretAccessKey ||
+    !credobj.SessionToken
+  ) {
+    throw new Error(`STS response missing credentials: ${data.slice(0, 200)}`);
+  }
+  return credobj;
+}
+
+async function postBatchStsUpdate(profiles, port) {
+  const response = await fetch("http://localhost:31339/update", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ profiles }),
+  });
+  const data = await response.text();
+  if (data !== "ok") {
+    throw new Error(data);
+  }
+  return data;
+}
+
+async function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
+  props = migratePinnedIndices(props);
+  const pinnedIndices = [...props.pinnedIndices]
+    .map((i) => Number(i))
+    .sort((a, b) => a - b)
+    .slice(0, 5);
+  if (pinnedIndices.length === 0) {
+    errHandler(port, "No pinned roles to refresh.");
+    return;
+  }
+
+  const lowestIndex = Math.min(...pinnedIndices);
+  try {
+    await postConsoleSaml(props, samlResponse, lowestIndex);
+  } catch (error) {
+    console.error(`Console SAML POST failed (non-blocking): ${error}`);
+  }
+
+  const stsByIndex = { ...(props.stsByIndex || {}) };
+  const batchProfiles = [];
+  const stsErrors = [];
+  let successCount = 0;
+
+  for (const index of pinnedIndices) {
+    const roleArn = roleArnForIndex(props, index);
+    if (!roleArn) {
+      stsErrors.push(`role${index}: missing role ARN`);
+      continue;
+    }
+    const principalArn = principalArnForRoleArn(roleArn, props);
+    try {
+      const credobj = await assumeRoleWithSAML(
+        roleArn,
+        principalArn,
+        samlResponse,
+        props,
+      );
+      stsByIndex[index] = credobj;
+      successCount += 1;
+
+      const slug = profileSlugForIndex(props, index);
+      if (!slug) {
+        stsErrors.push(`role${index}: could not build profile slug`);
+        continue;
       }
-      const date = new Date().toLocaleString();
-      console.log(`AWS AlwaysON refreshed tokens successfuly at ${date}`);
-      fetchSts(roleArn, principalArn, samlResponse, props, port, accountName);
-    })
-    .catch((error) => {
-      const msg = `Error in SAML fetch:${error}`;
-      errHandler(port, msg);
-    });
+      batchProfiles.push({
+        ProfileName: slug,
+        AccessKeyId: credobj.AccessKeyId,
+        SecretAccessKey: credobj.SecretAccessKey,
+        SessionToken: credobj.SessionToken,
+        Expiration: credobj.Expiration,
+        UpdateDefault: slug === "default",
+      });
+    } catch (error) {
+      stsErrors.push(`role${index}: ${error}`);
+      delete stsByIndex[index];
+      delete stsByIndex[String(index)];
+    }
+  }
+
+  storage.set({ stsByIndex });
+  if (successCount > 0) {
+    const firstOk = pinnedIndices.find((i) => stsByIndex[i]);
+    if (firstOk !== undefined) {
+      const c = stsByIndex[firstOk];
+      storage.set({
+        awsAccessKeyId: c.AccessKeyId,
+        awsSecretAccessKey: c.SecretAccessKey,
+        awsSessionToken: c.SessionToken,
+        awsExpiration: c.Expiration,
+      });
+    }
+  }
+  const detailParts = [];
+  if (stsErrors.length) detailParts.push(stsErrors.join("; "));
+
+  let aosvcError = null;
+  if (props.clientupdate && batchProfiles.length > 0) {
+    try {
+      await postBatchStsUpdate(batchProfiles, port);
+    } catch (error) {
+      aosvcError = String(error);
+    }
+  }
+
+  if (successCount === 0) {
+    const msg = detailParts.length
+      ? detailParts.join(". ")
+      : "All pinned STS requests failed.";
+    errHandler(port, msg);
+    return;
+  }
+
+  let detail = detailParts.length ? detailParts.join(". ") : "success";
+  if (aosvcError) {
+    detail = [detail, `aosvc: ${aosvcError}`].filter(Boolean).join(". ");
+  }
+  storage.set({ last_msg: "success", last_msg_detail: detail });
+  if (port) port.postMessage("sts_ready");
 }
 
 function refreshAwsRoles(port, samlResponse) {
@@ -343,7 +536,7 @@ async function awsInit(props, port = null, jobType = "refresh") {
         refreshAwsRoles(port, samlResponse);
         break;
       default:
-        refreshAwsTokensAndStsCredentials(props, port, samlResponse);
+        await refreshAwsTokensAndStsCredentials(props, port, samlResponse);
     }
   } catch (error) {
     const msg = `Error in AWS init: ${error}`;
@@ -351,65 +544,6 @@ async function awsInit(props, port = null, jobType = "refresh") {
   } finally {
     cleanupCookieInjection();
   }
-}
-
-function fetchSts(roleArn, principalArn, samlResponse, props, port, profileName) {
-  const formBody = new URLSearchParams({
-    Version: "2011-06-15",
-    Action: "AssumeRoleWithSAML",
-    RoleArn: roleArn,
-    PrincipalArn: principalArn,
-    SAMLAssertion: samlResponse.trim(),
-    DurationSeconds: props.session_duration,
-  }).toString();
-
-  fetch(awsStsUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "*/*",
-    },
-    body: formBody,
-  })
-    .then((response) => response.text())
-    .then((data) => {
-      const parseGlobal = RegExp(stsTokenRegex, "g");
-      let matches;
-      const credobj = {};
-      while ((matches = parseGlobal.exec(data)) !== null) {
-        matches = matches.filter((i) => i != null);
-        storage.set({ [`aws${matches[1]}`]: matches[2] });
-        credobj[`${matches[1]}`] = matches[2];
-      }
-      if (profileName) credobj['ProfileName'] = profileName;
-      if (props.clientupdate) {
-        fetch("http://localhost:31339/update", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(credobj),
-        })
-          .then((response) => response.text())
-          .then((data) => {
-            if (data !== "ok") {
-              errHandler(port, data);
-            }
-          })
-          .catch((error) => {
-            const msg = `Error updating local client:${error}`;
-            errHandler(port, msg);
-          });
-      }
-
-      storage.set({ last_msg: "success" });
-      if (port) port.postMessage("sts_ready");
-    })
-    .catch((error) => {
-      const msg = `Error getting STS credentials:${error}`;
-      errHandler(port, msg);
-    });
 }
 
 async function findAccountIndex(props, cookieStoreId = null) {

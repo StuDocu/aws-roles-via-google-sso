@@ -1,5 +1,5 @@
 body{
-    width: 500px;
+    width: 560px;
 }
 
 .grid-container {
@@ -7,18 +7,24 @@ body{
     grid-gap: 5px;
     padding: 5px;
     margin-right: 25px;
+    grid-template-columns: 220px minmax(160px, 1fr) auto auto;
+    align-items: center;
 }
 
-.grid-container > div {
+.role-row {
+    display: contents;
+}
+
+.grid-container > div:not(.account-header):not(.role-row) {
     font-size: 20px;
-    display:inline-grid;
-    grid-template-columns: auto auto auto;
+    display: inline-grid;
+    grid-template-columns: auto auto auto auto;
     align-items: center;
     justify-content: center;
 }
 
 .txtbox {
-    width:300px;
+    width:220px;
     height: 50px;
     align-self: center;
     justify-self: center;
@@ -124,7 +130,17 @@ input:checked + .slider:before {
     color: black;
 }
 
+.profile-slug {
+    font-size: 11px;
+    line-height: 1.2;
+    color: #333;
+    word-break: break-all;
+    align-self: center;
+    justify-self: start;
+}
+
 .account-header {
+    grid-column: 1 / -1;
     font-weight: 600;
     font-size: 14px;
     margin-top: 10px;
