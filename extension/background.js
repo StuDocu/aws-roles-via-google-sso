@@ -264,6 +264,27 @@ function roleArnForIndex(props, index) {
   return arnPrefix + role;
 }
 
+function slugPart(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// Keep in sync with profileSlugForIndex in menu.js.
+function profileSlugForIndex(props, index) {
+  const role = props[`role${index}`];
+  if (!role) return "";
+  const accountId = role.split(":")[0];
+  const roleName = role.includes("/") ? role.split("/").pop() : role;
+  const rawName = (props.accountNames || {})[accountId] || accountId;
+  const accountLabel = String(rawName).replace(/\s*\(\d+\)\s*$/, "");
+  const accountSlug = slugPart(accountLabel);
+  const roleSlug = slugPart(roleName);
+  if (!accountSlug || !roleSlug) return "";
+  return `${accountSlug}-${roleSlug}`;
+}
+
 function principalArnForRoleArn(roleArn, props) {
   const awsAccount = roleArn.split(":")[4];
   return `${arnPrefix}${awsAccount}:saml-provider/${props.saml_provider}`;
@@ -360,7 +381,6 @@ async function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
   const stsByIndex = { ...(props.stsByIndex || {}) };
   const batchProfiles = [];
   const stsErrors = [];
-  const skippedSlugs = [];
   let successCount = 0;
 
   for (const index of pinnedIndices) {
@@ -380,9 +400,9 @@ async function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
       stsByIndex[index] = credobj;
       successCount += 1;
 
-      const slug = (props[`profileSlug${index}`] || "").trim();
+      const slug = profileSlugForIndex(props, index);
       if (!slug) {
-        skippedSlugs.push(index);
+        stsErrors.push(`role${index}: could not build profile slug`);
         continue;
       }
       batchProfiles.push({
@@ -415,11 +435,6 @@ async function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
   }
   const detailParts = [];
   if (stsErrors.length) detailParts.push(stsErrors.join("; "));
-  if (skippedSlugs.length) {
-    detailParts.push(
-      `Skipped aosvc for pin(s) ${skippedSlugs.join(", ")} (empty profile slug)`,
-    );
-  }
 
   let aosvcError = null;
   if (props.clientupdate && batchProfiles.length > 0) {

@@ -1,5 +1,5 @@
 body{
-    width: 500px;
+    width: 560px;
 }
 
 .grid-container {
@@ -7,7 +7,7 @@ body{
     grid-gap: 5px;
     padding: 5px;
     margin-right: 25px;
-    grid-template-columns: 300px 140px auto auto;
+    grid-template-columns: 220px minmax(160px, 1fr) auto auto;
     align-items: center;
 }
 
@@ -24,7 +24,7 @@ body{
 }
 
 .txtbox {
-    width:300px;
+    width:220px;
     height: 50px;
     align-self: center;
     justify-self: center;
@@ -131,11 +131,12 @@ input:checked + .slider:before {
 }
 
 .profile-slug {
-    width: 130px;
-    height: 36px;
-    font-size: 14px;
+    font-size: 11px;
+    line-height: 1.2;
+    color: #333;
+    word-break: break-all;
     align-self: center;
-    justify-self: center;
+    justify-self: start;
 }
 
 .account-header {

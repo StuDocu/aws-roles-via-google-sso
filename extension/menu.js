@@ -27,6 +27,27 @@ function migratePinnedIndices(props) {
 	return props;
 }
 
+function slugPart(value) {
+	return String(value)
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+}
+
+// Keep in sync with profileSlugForIndex in background.js.
+function profileSlugForIndex(props, index) {
+	const role = props[`role${index}`];
+	if (!role) return "";
+	const accountId = role.split(":")[0];
+	const roleName = role.includes("/") ? role.split("/").pop() : role;
+	const rawName = (props.accountNames || {})[accountId] || accountId;
+	const accountLabel = String(rawName).replace(/\s*\(\d+\)\s*$/, "");
+	const accountSlug = slugPart(accountLabel);
+	const roleSlug = slugPart(roleName);
+	if (!accountSlug || !roleSlug) return "";
+	return `${accountSlug}-${roleSlug}`;
+}
+
 function handleTextboxes(props) {
 	$("input[id^='role']").each(function () {
 		if ($(this).prop("readonly")) {
@@ -38,12 +59,6 @@ function handleTextboxes(props) {
 		const currentRoleTxtBox = $(this);
 		if (typeof props[id] !== "undefined") {
 			currentRoleTxtBox.val(props[id]);
-		}
-	});
-	$("input[id^='profileSlug']").each(function () {
-		const id = $(this).attr("id");
-		if (typeof props[id] !== "undefined") {
-			$(this).val(props[id]);
 		}
 	});
 }
@@ -128,13 +143,12 @@ async function buildMenu(props) {
 			$(".txtbox").css("pointer-events", "none");
 			jQuery("<input>", textboxProperties).appendTo(`#item${i}`);
 
-			jQuery("<input>", {
-				type: "text",
-				value: "",
+			const slug = profileSlugForIndex(props, i);
+			jQuery("<span>", {
 				id: `profileSlug${i}`,
-				placeholder: "CLI profile",
 				class: "profile-slug",
-				"data-index": i,
+				text: slug,
+				title: slug,
 			}).appendTo(`#item${i}`);
 
 			jQuery("<label>", {
@@ -267,11 +281,6 @@ async function main() {
 		const roleName = $(this).attr("id");
 		const roleValue = $(this).val();
 		storage.set({ [roleName]: roleValue });
-	});
-
-	$("input[id^='profileSlug']").focusout(function () {
-		const slugName = $(this).attr("id");
-		storage.set({ [slugName]: $(this).val() });
 	});
 
 	$('[id^="sts_button"]').click(function () {
