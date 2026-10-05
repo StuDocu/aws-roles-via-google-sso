@@ -37,6 +37,11 @@ type Credentials struct {
 	SessionToken    string
 	Expiration      string
 	ProfileName     string
+	UpdateDefault   bool
+}
+
+type batchRequest struct {
+	Profiles []Credentials `json:"profiles"`
 }
 
 func main() {
@@ -98,12 +103,11 @@ func (p *program) getLogin() (string, error) {
 	return p.settings.username, nil
 }
 
-func (p *program) updateCredFile(creds Credentials) error {
-	// var cfg *ini.File
-	user,err := p.getLogin()
+func (p *program) credentialsFilePath() (string, error) {
+	user, err := p.getLogin()
 	if err != nil {
 		log.Printf("could not get username from user:%v", err)
-		return err
+		return "", err
 	}
 	var filePath string
 	if p.settings.os=="windows" {
@@ -114,6 +118,23 @@ func (p *program) updateCredFile(creds Credentials) error {
 		filePath = fmt.Sprintf("/home/%v/.aws/", user)
 	}
 	log.Printf("credentials dir:%v", filePath)
+	return filePath, nil
+}
+
+func writeCredSection(cfg *ini.File, sectionName string, creds Credentials) {
+	cfg.DeleteSection(sectionName)
+	cfg.NewSection(sectionName)
+	cfg.Section(sectionName).Key("aws_access_key_id").SetValue(creds.AccessKeyId)
+	cfg.Section(sectionName).Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
+	cfg.Section(sectionName).Key("aws_session_token").SetValue(creds.SessionToken)
+	cfg.Section(sectionName).Key("aws_session_expiration").SetValue(creds.Expiration)
+}
+
+func (p *program) updateCredFile(creds Credentials) error {
+	filePath, err := p.credentialsFilePath()
+	if err != nil {
+		return err
+	}
 	cfg, err := ini.Load(filePath+"credentials")
     if err != nil {
 		log.Printf("failed to read file: %v", err)
@@ -129,15 +150,36 @@ func (p *program) updateCredFile(creds Credentials) error {
 	cfg.Section("default").Key("aws_session_expiration").SetValue(creds.Expiration)
 	log.Printf("updated default section")
 	if creds.ProfileName != "" {
-		cfg.DeleteSection(creds.ProfileName)
-		cfg.NewSection(creds.ProfileName)
-		cfg.Section(creds.ProfileName).Key("aws_access_key_id").SetValue(creds.AccessKeyId)
-		cfg.Section(creds.ProfileName).Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
-		cfg.Section(creds.ProfileName).Key("aws_session_token").SetValue(creds.SessionToken)
-		cfg.Section(creds.ProfileName).Key("aws_session_expiration").SetValue(creds.Expiration)
+		writeCredSection(cfg, creds.ProfileName, creds)
 	}
 	cfg.SaveTo(filePath+"credentials")
 	log.Printf("updated %vcredentials file", filePath)
+	return nil
+}
+
+func (p *program) updateCredFileBatch(profiles []Credentials) error {
+	filePath, err := p.credentialsFilePath()
+	if err != nil {
+		return err
+	}
+	cfg, err := ini.Load(filePath+"credentials")
+	if err != nil {
+		log.Printf("failed to read file: %v", err)
+		cfg = ini.Empty()
+		_ = os.MkdirAll(filePath, os.ModePerm)
+	}
+	for _, creds := range profiles {
+		if creds.ProfileName == "" {
+			continue
+		}
+		writeCredSection(cfg, creds.ProfileName, creds)
+		if creds.ProfileName == "default" || creds.UpdateDefault {
+			writeCredSection(cfg, "default", creds)
+			log.Printf("updated default section from profile %s", creds.ProfileName)
+		}
+	}
+	cfg.SaveTo(filePath+"credentials")
+	log.Printf("updated %vcredentials file (batch)", filePath)
 	return nil
 }
 
@@ -156,14 +198,34 @@ func (p *program) processUpdate(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("could not read body: %s\n", err)
 		}
-		creds := Credentials{}
-		json.Unmarshal([]byte(body), &creds)
-		err = p.updateCredFile(creds)
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(body, &raw); err != nil {
+			log.Printf("could not parse json: %v", err)
+			io.WriteString(w, fmt.Sprintf("could not parse json: %v", err))
+			return
+		}
 		var response string
-		if err != nil {
-			response = fmt.Sprintf("could not update file: %v", err)
+		if _, ok := raw["profiles"]; ok {
+			batch := batchRequest{}
+			if err := json.Unmarshal(body, &batch); err != nil {
+				response = fmt.Sprintf("could not parse batch: %v", err)
+			} else {
+				err = p.updateCredFileBatch(batch.Profiles)
+				if err != nil {
+					response = fmt.Sprintf("could not update file: %v", err)
+				} else {
+					response = "ok"
+				}
+			}
 		} else {
-			response = "ok"
+			creds := Credentials{}
+			json.Unmarshal(body, &creds)
+			err = p.updateCredFile(creds)
+			if err != nil {
+				response = fmt.Sprintf("could not update file: %v", err)
+			} else {
+				response = "ok"
+			}
 		}
 		w.Header().Set("Connection", "close")
 		io.WriteString(w, response)

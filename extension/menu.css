@@ -7,12 +7,18 @@ body{
     grid-gap: 5px;
     padding: 5px;
     margin-right: 25px;
+    grid-template-columns: 300px 140px auto auto;
+    align-items: center;
 }
 
-.grid-container > div {
+.role-row {
+    display: contents;
+}
+
+.grid-container > div:not(.account-header):not(.role-row) {
     font-size: 20px;
-    display:inline-grid;
-    grid-template-columns: auto auto auto;
+    display: inline-grid;
+    grid-template-columns: auto auto auto auto;
     align-items: center;
     justify-content: center;
 }
@@ -124,7 +130,16 @@ input:checked + .slider:before {
     color: black;
 }
 
+.profile-slug {
+    width: 130px;
+    height: 36px;
+    font-size: 14px;
+    align-self: center;
+    justify-self: center;
+}
+
 .account-header {
+    grid-column: 1 / -1;
     font-weight: 600;
     font-size: 14px;
     margin-top: 10px;
