@@ -420,6 +420,13 @@ async function refreshAwsTokensAndStsCredentials(props, port, samlResponse) {
     }
   }
 
+  // Slugs are always {account}-{role}, so no profile is ever named "default".
+  // Keep [default] on the primary (lowest pinned) role, as before named profiles,
+  // so tools without AWS_PROFILE still find credentials.
+  if (batchProfiles.length > 0 && !batchProfiles.some((p) => p.UpdateDefault)) {
+    batchProfiles[0].UpdateDefault = true;
+  }
+
   storage.set({ stsByIndex });
   if (successCount > 0) {
     const firstOk = pinnedIndices.find((i) => stsByIndex[i]);
